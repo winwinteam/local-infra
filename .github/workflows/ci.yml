@@ -26,14 +26,16 @@ jobs:
 
       - name: Validate Conventional Commits
         run: |
-          npm install --no-save --no-package-lock @commitlint/cli@19 @commitlint/config-conventional@19
+          if ! command -v commitlint >/dev/null 2>&1; then
+            npm install --no-save --no-package-lock @commitlint/cli@19 @commitlint/config-conventional@19
+          fi
           if [ -n "${{ github.event.pull_request.base.sha }}" ]; then
             BASE_REF="${{ github.event.pull_request.base.sha }}"
           else
             BASE_REF=$(git rev-parse --verify origin/main 2>/dev/null || git rev-parse HEAD~1)
           fi
-          npx commitlint --from "$BASE_REF" --to HEAD --verbose
-          rm -rf node_modules
+          commitlint --from "$BASE_REF" --to HEAD --verbose || npx commitlint --from "$BASE_REF" --to HEAD --verbose
+          rm -rf node_modules 2>/dev/null || true
 
   detect-changes:
     name: Detect Changed Services
@@ -159,9 +161,7 @@ jobs:
             fi
           fi
           mkdir -p grafana/data
-          if [ "${ACT:-}" != "true" ]; then
-            sudo chown -R 1000:1000 grafana/data
-          fi
+          sudo chown -R 1000:1000 grafana/data 2>/dev/null || chmod -R 777 grafana/data
 
       - name: Start HyperDX Stack
         working-directory: hyperdx

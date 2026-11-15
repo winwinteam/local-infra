@@ -57,7 +57,7 @@ case "$TARGET" in
     run_job "test-langfuse-stack" "$@"
     ;;
   lint|lint-commits)
-    "$ACT_BIN" push -j "lint-commits" -W "$WORKFLOW_FILE" "$@"
+    run_job "lint-commits" "$@"
     ;;
   all)
     run_job "test-hyperdx-stack" "$@"
