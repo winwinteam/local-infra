@@ -27,19 +27,20 @@ compose_up_smart "$SERVICE_DIR" -- "$@"
 
 echo "Waiting for Grafana Web UI on http://${CONNECT_IP}:${GRAFANA_PORT}/api/health ..."
 READY=0
-for _ in {1..30}; do
-  if curl -s -f "http://${CONNECT_IP}:${GRAFANA_PORT}/api/health" > /dev/null 2>&1; then
+for i in {1..30}; do
+  if curl -s -f --max-time 3 --connect-timeout 2 "http://${CONNECT_IP}:${GRAFANA_PORT}/api/health" > /dev/null 2>&1; then
     echo "Grafana Web UI is ready!"
     READY=1
     break
   fi
   sleep 2
-  printf "."
+  echo "  ... waiting for Grafana Web UI ($i/30)"
 done
 
 if [ "$READY" -ne 1 ]; then
   echo ""
   echo "ERROR: Grafana Web UI failed to become healthy within 60 seconds." >&2
+  docker logs --tail 50 grafana 2>/dev/null || true
   exit 1
 fi
 

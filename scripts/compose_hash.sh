@@ -69,8 +69,8 @@ compose_up_smart() {
   fi
 
   if [ -z "$previous_hash" ]; then
-    echo "  [hash-check] No previous state found (${current_hash:0:12}...). Running initial 'docker compose up -d'..."
-    (cd "$service_dir" && docker compose up -d "$@")
+    echo "  [hash-check] No previous state found (${current_hash:0:12}...). Running initial 'docker compose up -d --build'..."
+    (cd "$service_dir" && docker compose up -d --build "$@")
   elif [ "$current_hash" != "$previous_hash" ]; then
     echo "  [hash-check] Config/.env change detected (${previous_hash:0:12}... -> ${current_hash:0:12}...). Running with '--build --force-recreate'..."
     (cd "$service_dir" && docker compose up -d --build --force-recreate "$@")
