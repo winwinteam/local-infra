@@ -40,6 +40,7 @@ run_job() {
     -W "$WORKFLOW_FILE" \
     -P ubuntu-latest=-self-hosted \
     --env LOCAL_INFRA_ROOT="$REPO_ROOT" \
+    --env ACT=true \
     "$@"
 }
 
@@ -48,7 +49,7 @@ case "$TARGET" in
     "$ACT_BIN" -l -W "$WORKFLOW_FILE" "$@"
     ;;
   dry-run|-n|--dryrun)
-    "$ACT_BIN" push -n -W "$WORKFLOW_FILE" -P ubuntu-latest=-self-hosted --env LOCAL_INFRA_ROOT="$REPO_ROOT" "$@"
+    "$ACT_BIN" push -n -W "$WORKFLOW_FILE" -P ubuntu-latest=-self-hosted --env LOCAL_INFRA_ROOT="$REPO_ROOT" --env ACT=true "$@"
     ;;
   hyperdx|grafana|test-hyperdx-stack)
     run_job "test-hyperdx-stack" "$@"
