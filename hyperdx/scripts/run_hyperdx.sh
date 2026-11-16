@@ -32,19 +32,19 @@ compose_up_smart "$SERVICE_DIR" -- "$@"
 
 echo "Waiting for HyperDX Web UI on http://${CONNECT_IP}:${UI_PORT} ..."
 READY=0
-for i in {1..60}; do
+for i in {1..90}; do
   if curl -s -f --max-time 3 --connect-timeout 2 "http://${CONNECT_IP}:${UI_PORT}" > /dev/null 2>&1; then
     echo "HyperDX Web UI is ready!"
     READY=1
     break
   fi
   sleep 2
-  echo "  ... waiting for HyperDX Web UI ($i/60)"
+  echo "  ... waiting for HyperDX Web UI ($i/90)"
 done
 
 if [ "$READY" -ne 1 ]; then
   echo ""
-  echo "ERROR: HyperDX Web UI failed to become healthy within 120 seconds." >&2
+  echo "ERROR: HyperDX Web UI failed to become healthy within 180 seconds." >&2
   docker logs --tail 50 hyperdx 2>/dev/null || true
   exit 1
 fi
