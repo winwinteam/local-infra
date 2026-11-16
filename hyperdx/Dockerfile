@@ -8,6 +8,8 @@ LABEL org.opencontainers.image.title="HyperDX Local Observability Stack" \
       org.opencontainers.image.vendor="HyperDX"
 
 ENV NODE_ENV=production \
+    HOSTNAME=0.0.0.0 \
+    HYPERDX_APP_LISTEN_HOSTNAME=0.0.0.0 \
     HYPERDX_APP_URL=http://localhost:8088 \
     FRONTEND_URL=http://localhost:8088 \
     HYPERDX_API_PORT=8000 \

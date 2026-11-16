@@ -24,6 +24,8 @@ services:
       - "${HYPERDX_LISTEN_IP:?HYPERDX_LISTEN_IP must be set in .env}:${HYPERDX_CLICKHOUSE_TCP_PORT:?HYPERDX_CLICKHOUSE_TCP_PORT must be set in .env}:9000"
     environment:
       - NODE_ENV=production
+      - HOSTNAME=0.0.0.0
+      - HYPERDX_APP_LISTEN_HOSTNAME=0.0.0.0
       - TZ=${TZ:?TZ must be set in .env}
       - FRONTEND_URL=http://localhost:${HYPERDX_UI_PORT:?HYPERDX_UI_PORT must be set in .env}
       - HYPERDX_API_PORT=8000
