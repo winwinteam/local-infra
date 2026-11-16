@@ -16,12 +16,7 @@ services:
     image: hyperdx-local:latest
     container_name: hyperdx
     restart: unless-stopped
-    ports:
-      - "${HYPERDX_LISTEN_IP:?HYPERDX_LISTEN_IP must be set in .env}:${HYPERDX_UI_PORT:?HYPERDX_UI_PORT must be set in .env}:8080"
-      - "${HYPERDX_LISTEN_IP:?HYPERDX_LISTEN_IP must be set in .env}:${HYPERDX_OTLP_HTTP_PORT:?HYPERDX_OTLP_HTTP_PORT must be set in .env}:4318"
-      - "${HYPERDX_LISTEN_IP:?HYPERDX_LISTEN_IP must be set in .env}:${HYPERDX_OTLP_GRPC_PORT:?HYPERDX_OTLP_GRPC_PORT must be set in .env}:4317"
-      - "${HYPERDX_LISTEN_IP:?HYPERDX_LISTEN_IP must be set in .env}:${HYPERDX_CLICKHOUSE_HTTP_PORT:?HYPERDX_CLICKHOUSE_HTTP_PORT must be set in .env}:8123"
-      - "${HYPERDX_LISTEN_IP:?HYPERDX_LISTEN_IP must be set in .env}:${HYPERDX_CLICKHOUSE_TCP_PORT:?HYPERDX_CLICKHOUSE_TCP_PORT must be set in .env}:9000"
+    network_mode: host
     environment:
       - NODE_ENV=production
       - HOSTNAME=0.0.0.0
@@ -29,7 +24,7 @@ services:
       - TZ=${TZ:?TZ must be set in .env}
       - FRONTEND_URL=http://localhost:${HYPERDX_UI_PORT:?HYPERDX_UI_PORT must be set in .env}
       - HYPERDX_API_PORT=8000
-      - HYPERDX_APP_PORT=8080
+      - HYPERDX_APP_PORT=${HYPERDX_UI_PORT:?HYPERDX_UI_PORT must be set in .env}
       - HYPERDX_LOG_LEVEL=info
       - USAGE_STATS_ENABLED=false
       # Pre-configured ClickHouse connection for hyperdx-local (skips GUI connection wizard)
@@ -41,13 +36,11 @@ services:
       - hyperdx_mongo_data:/data/db
       - /etc/localtime:/etc/localtime:ro
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8080 || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:${HYPERDX_UI_PORT:-8088} || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5
       start_period: 30s
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
 
 volumes:
   hyperdx_ch_data:

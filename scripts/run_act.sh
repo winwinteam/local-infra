@@ -35,6 +35,7 @@ run_job() {
   echo "=========================================================="
   echo " Running act job: ${job_id}"
   echo "=========================================================="
+  grep -q "host.docker.internal" /etc/hosts 2>/dev/null || ( echo "127.0.0.1 host.docker.internal" | sudo tee -a /etc/hosts >/dev/null 2>&1 || true )
   "$ACT_BIN" push \
     -j "$job_id" \
     -W "$WORKFLOW_FILE" \
