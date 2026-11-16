@@ -3,6 +3,9 @@
 # Reference: https://github.com/hyperdxio/hyperdx/tree/main/docker/hyperdx
 FROM ghcr.io/hyperdxio/hyperdx-local:2-beta
 
+# Patch entry.sh to ensure Next.js binds to 0.0.0.0 (all interfaces) rather than defaulting to localhost
+RUN sed -i 's|next start -p|next start -H 0.0.0.0 -p|g' /etc/local/entry.sh
+
 LABEL org.opencontainers.image.title="HyperDX Local Observability Stack" \
       org.opencontainers.image.description="Decoupled local OpenTelemetry trace and log collector for services" \
       org.opencontainers.image.vendor="HyperDX"
