@@ -8,10 +8,9 @@
 # Do not run this file directly: use docker-compose.yaml next to it, which includes
 # this file and points Compose at .env (SSOT) via `env_file:`.
 #
-# Only the web UI (and MinIO, for media uploads) is published, and only on
-# loopback. ClickHouse/Redis/Postgres stay on the internal network so they can't
-# collide with HyperDX (8123/9000/4317/4318), the app's Redis (6379), or any
-# local Postgres (5432).
+# Uses `network_mode: host` for compatibility with krunvm (AF_TSI). ClickHouse
+# runs on 18123/19000 and MinIO runs on 9090/9091 so they cannot collide with
+# HyperDX (8123/9000/4317/4318) when both stacks run simultaneously.
 #
 # Start:    bash scripts/run_langfuse.sh
 # Test:     bash scripts/test_langfuse.sh
@@ -24,13 +23,13 @@
 
 x-langfuse-env: &langfuse-env
   NEXTAUTH_URL: http://localhost:${LANGFUSE_UI_PORT:?LANGFUSE_UI_PORT must be set in .env}
-  DATABASE_URL: postgresql://postgres:${LANGFUSE_POSTGRES_PASSWORD:?LANGFUSE_POSTGRES_PASSWORD must be set in .env}@postgres:5432/postgres
+  DATABASE_URL: postgresql://postgres:${LANGFUSE_POSTGRES_PASSWORD:?LANGFUSE_POSTGRES_PASSWORD must be set in .env}@127.0.0.1:5432/postgres
   SALT: ${LANGFUSE_SALT:?LANGFUSE_SALT must be set in .env}
   # 64 hex chars. Generate a real one with: openssl rand -hex 32
   ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY:?LANGFUSE_ENCRYPTION_KEY must be set in .env}
   TELEMETRY_ENABLED: "false"
-  CLICKHOUSE_MIGRATION_URL: clickhouse://clickhouse:9000
-  CLICKHOUSE_URL: http://clickhouse:8123
+  CLICKHOUSE_MIGRATION_URL: clickhouse://127.0.0.1:19000
+  CLICKHOUSE_URL: http://127.0.0.1:18123
   CLICKHOUSE_USER: clickhouse
   CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD:?LANGFUSE_CLICKHOUSE_PASSWORD must be set in .env}
   CLICKHOUSE_CLUSTER_ENABLED: "false"
@@ -38,17 +37,17 @@ x-langfuse-env: &langfuse-env
   LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
   LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: minio
   LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${LANGFUSE_MINIO_PASSWORD:?LANGFUSE_MINIO_PASSWORD must be set in .env}
-  LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://minio:9000
+  LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://127.0.0.1:9090
   LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
   LANGFUSE_S3_EVENT_UPLOAD_PREFIX: events/
   LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
   LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
   LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: minio
   LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: ${LANGFUSE_MINIO_PASSWORD:?LANGFUSE_MINIO_PASSWORD must be set in .env}
-  LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://minio:9000
+  LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://127.0.0.1:9090
   LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
   LANGFUSE_S3_MEDIA_UPLOAD_PREFIX: media/
-  REDIS_HOST: redis
+  REDIS_HOST: 127.0.0.1
   REDIS_PORT: "6379"
   REDIS_AUTH: ${LANGFUSE_REDIS_AUTH:?LANGFUSE_REDIS_AUTH must be set in .env}
 
@@ -56,6 +55,7 @@ services:
   langfuse-worker:
     image: docker.langfuse.com/langfuse/langfuse-worker:4
     restart: unless-stopped
+    network_mode: host
     depends_on: &deps
       postgres: { condition: service_healthy }
       minio: { condition: service_healthy }
@@ -66,15 +66,16 @@ services:
   langfuse-web:
     image: docker.langfuse.com/langfuse/langfuse:4
     restart: unless-stopped
+    network_mode: host
     depends_on: *deps
-    ports:
-      - "${LANGFUSE_LISTEN_IP:?LANGFUSE_LISTEN_IP must be set in .env}:${LANGFUSE_UI_PORT:?LANGFUSE_UI_PORT must be set in .env}:3000"
     environment:
       <<: *langfuse-env
+      HOSTNAME: ${LANGFUSE_LISTEN_IP:?LANGFUSE_LISTEN_IP must be set in .env}
+      PORT: ${LANGFUSE_UI_PORT:?LANGFUSE_UI_PORT must be set in .env}
       NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET:?LANGFUSE_NEXTAUTH_SECRET must be set in .env}
       # Browser-facing MinIO endpoint for media uploads (unused by ai_service).
       LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://localhost:9090
-      LANGFUSE_S3_MEDIA_UPLOAD_INTERNAL_ENDPOINT: http://minio:9000
+      LANGFUSE_S3_MEDIA_UPLOAD_INTERNAL_ENDPOINT: http://127.0.0.1:9090
       # Headless first run: org + project + admin user + a fixed API key pair, so
       # ai_service can export immediately. LOCAL DEV ONLY (see .env.example).
       LANGFUSE_INIT_ORG_ID: ringisho
@@ -90,16 +91,17 @@ services:
   clickhouse:
     image: docker.io/clickhouse/clickhouse-server:25.12
     restart: unless-stopped
+    network_mode: host
     user: "101:101"
+    command: ["--", "--http_port=18123", "--tcp_port=19000", "--interserver_http_port=19009"]
     environment:
-      CLICKHOUSE_DB: default
       CLICKHOUSE_USER: clickhouse
       CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD:?LANGFUSE_CLICKHOUSE_PASSWORD must be set in .env}
     volumes:
       - langfuse_clickhouse_data:/var/lib/clickhouse
       - langfuse_clickhouse_logs:/var/log/clickhouse-server
     healthcheck:
-      test: wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1
+      test: wget --no-verbose --tries=1 --spider http://127.0.0.1:18123/ping || exit 1
       interval: 5s
       timeout: 5s
       retries: 10
@@ -108,14 +110,14 @@ services:
   minio:
     image: cgr.dev/chainguard/minio
     restart: unless-stopped
+    network_mode: host
     entrypoint: sh
     # create the 'langfuse' bucket before starting the service
-    command: -c 'mkdir -p /data/langfuse && minio server --address ":9000" --console-address ":9001" /data'
+    command: -c 'mkdir -p /data/langfuse && minio server --address "127.0.0.1:9090" --console-address "127.0.0.1:9091" /data'
     environment:
       MINIO_ROOT_USER: minio
       MINIO_ROOT_PASSWORD: ${LANGFUSE_MINIO_PASSWORD:?LANGFUSE_MINIO_PASSWORD must be set in .env}
-    ports:
-      - "127.0.0.1:9090:9000"
+      MC_HOST_local: http://127.0.0.1:9090
     volumes:
       - langfuse_minio_data:/data
     healthcheck:
@@ -128,6 +130,7 @@ services:
   redis:
     image: docker.io/redis:7
     restart: unless-stopped
+    network_mode: host
     command: >
       --requirepass ${LANGFUSE_REDIS_AUTH:?LANGFUSE_REDIS_AUTH must be set in .env}
       --maxmemory-policy noeviction
@@ -142,8 +145,9 @@ services:
   postgres:
     image: docker.io/postgres:17
     restart: unless-stopped
+    network_mode: host
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres"]
       interval: 3s
       timeout: 3s
       retries: 10

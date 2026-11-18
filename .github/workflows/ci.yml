@@ -26,14 +26,16 @@ jobs:
 
       - name: Validate Conventional Commits
         run: |
-          npm install --no-save --no-package-lock @commitlint/cli@19 @commitlint/config-conventional@19
+          if ! command -v commitlint >/dev/null 2>&1; then
+            npm install --no-save --no-package-lock @commitlint/cli@19 @commitlint/config-conventional@19
+          fi
           if [ -n "${{ github.event.pull_request.base.sha }}" ]; then
             BASE_REF="${{ github.event.pull_request.base.sha }}"
           else
             BASE_REF=$(git rev-parse --verify origin/main 2>/dev/null || git rev-parse HEAD~1)
           fi
-          npx commitlint --from "$BASE_REF" --to HEAD --verbose
-          rm -rf node_modules
+          commitlint --from "$BASE_REF" --to HEAD --verbose || npx commitlint --from "$BASE_REF" --to HEAD --verbose
+          rm -rf node_modules 2>/dev/null || true
 
   detect-changes:
     name: Detect Changed Services
@@ -41,15 +43,21 @@ jobs:
     permissions:
       pull-requests: read
     outputs:
-      langfuse: ${{ steps.filter.outputs.langfuse }}
-      hyperdx: ${{ steps.filter.outputs.hyperdx }}
+      langfuse: ${{ steps.filter.outputs.langfuse || steps.act-fallback.outputs.enabled }}
+      hyperdx: ${{ steps.filter.outputs.hyperdx || steps.act-fallback.outputs.enabled }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
+      - name: Enable all targets when running under local act
+        if: ${{ env.ACT }}
+        id: act-fallback
+        run: echo "enabled=true" >> "$GITHUB_OUTPUT"
+
       - name: Check for changes
+        if: ${{ !env.ACT }}
         id: filter
         run: |
           if [ -n "${{ github.event.pull_request.base.sha }}" ]; then
@@ -60,12 +68,12 @@ jobs:
           CHANGED=$(git diff --name-only "$BASE_REF"...HEAD)
           echo "Changed files since $BASE_REF:"
           echo "$CHANGED"
-          if echo "$CHANGED" | grep -qE '^(langfuse/|\.github/workflows/ci\.yml$)'; then
+          if echo "$CHANGED" | grep -qE '^(langfuse/|scripts/|\.github/workflows/ci\.yml$)'; then
             echo "langfuse=true" >> "$GITHUB_OUTPUT"
           else
             echo "langfuse=false" >> "$GITHUB_OUTPUT"
           fi
-          if echo "$CHANGED" | grep -qE '^(hyperdx/|\.github/workflows/ci\.yml$)'; then
+          if echo "$CHANGED" | grep -qE '^(hyperdx/|grafana/|scripts/|\.github/workflows/ci\.yml$)'; then
             echo "hyperdx=true" >> "$GITHUB_OUTPUT"
           else
             echo "hyperdx=false" >> "$GITHUB_OUTPUT"
@@ -83,10 +91,19 @@ jobs:
 
       - name: Set up environment file
         run: |
-          cp langfuse/.env.example langfuse/.env
-          # Replace placeholder secrets with valid hex strings
-          sed -i "s/CHANGEME_32_HEX_CHARS/$(openssl rand -hex 16)/g" langfuse/.env
-          sed -i "s/CHANGEME_64_HEX_CHARS/$(openssl rand -hex 32)/g" langfuse/.env
+          if [ ! -f langfuse/.env ]; then
+            HOST_REPO="${LOCAL_INFRA_ROOT:-$(readlink -f /proc/$PPID/cwd 2>/dev/null || true)}"
+            EXISTING_DIR="$(docker inspect langfuse-postgres-1 --format '{{index .Config.Labels "com.docker.compose.project.working_dir"}}' 2>/dev/null || true)"
+            if [ -n "$HOST_REPO" ] && [ -f "$HOST_REPO/langfuse/.env" ]; then
+              cp "$HOST_REPO/langfuse/.env" langfuse/.env
+            elif [ -n "$EXISTING_DIR" ] && [ -f "$EXISTING_DIR/.env" ]; then
+              cp "$EXISTING_DIR/.env" langfuse/.env
+            else
+              cp langfuse/.env.example langfuse/.env
+              sed -i "s/CHANGEME_32_HEX_CHARS/$(openssl rand -hex 16)/g" langfuse/.env
+              sed -i "s/CHANGEME_64_HEX_CHARS/$(openssl rand -hex 32)/g" langfuse/.env
+            fi
+          fi
 
       - name: Start Langfuse Stack
         working-directory: langfuse
@@ -105,7 +122,7 @@ jobs:
           docker compose logs --tail=100
 
       - name: Teardown Stack
-        if: always()
+        if: ${{ always() && !env.ACT }}
         working-directory: langfuse
         run: |
           docker compose down -v
@@ -122,7 +139,29 @@ jobs:
 
       - name: Set up environment file
         run: |
-          cp hyperdx/.env.example hyperdx/.env
+          HOST_REPO="${LOCAL_INFRA_ROOT:-$(readlink -f /proc/$PPID/cwd 2>/dev/null || true)}"
+          if [ ! -f hyperdx/.env ]; then
+            EXISTING_HDX_DIR="$(docker inspect hyperdx --format '{{index .Config.Labels "com.docker.compose.project.working_dir"}}' 2>/dev/null || true)"
+            if [ -n "$HOST_REPO" ] && [ -f "$HOST_REPO/hyperdx/.env" ]; then
+              cp "$HOST_REPO/hyperdx/.env" hyperdx/.env
+            elif [ -n "$EXISTING_HDX_DIR" ] && [ -f "$EXISTING_HDX_DIR/.env" ]; then
+              cp "$EXISTING_HDX_DIR/.env" hyperdx/.env
+            else
+              cp hyperdx/.env.example hyperdx/.env
+            fi
+          fi
+          if [ ! -f grafana/.env ]; then
+            EXISTING_GF_DIR="$(docker inspect grafana --format '{{index .Config.Labels "com.docker.compose.project.working_dir"}}' 2>/dev/null || true)"
+            if [ -n "$HOST_REPO" ] && [ -f "$HOST_REPO/grafana/.env" ]; then
+              cp "$HOST_REPO/grafana/.env" grafana/.env
+            elif [ -n "$EXISTING_GF_DIR" ] && [ -f "$EXISTING_GF_DIR/.env" ]; then
+              cp "$EXISTING_GF_DIR/.env" grafana/.env
+            else
+              cp grafana/.env.example grafana/.env
+            fi
+          fi
+          mkdir -p grafana/data
+          sudo chown -R 1000:1000 grafana/data 2>/dev/null || chmod -R 777 grafana/data
 
       - name: Start HyperDX Stack
         working-directory: hyperdx
@@ -136,12 +175,12 @@ jobs:
 
       - name: Dump container logs on failure
         if: failure()
-        working-directory: hyperdx
         run: |
-          docker compose logs --tail=100
+          docker compose -f hyperdx/docker-compose.yaml logs --tail=100
+          docker compose -f grafana/docker-compose.yaml logs --tail=100
 
       - name: Teardown Stack
-        if: always()
-        working-directory: hyperdx
+        if: ${{ always() && !env.ACT }}
         run: |
-          docker compose down -v
+          docker compose -f grafana/docker-compose.yaml down -v
+          docker compose -f hyperdx/docker-compose.yaml down -v

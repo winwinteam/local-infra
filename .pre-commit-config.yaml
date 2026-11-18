@@ -117,7 +117,7 @@ repos:
     hooks:
       - id: act-local-ci
         name: Run GitHub CI workflow locally via nektos/act
-        entry: act workflow_dispatch -W .github/workflows/ci.yml --pull=false
+        entry: act workflow_dispatch -W .github/workflows/ci.yml
         language: system
         pass_filenames: false
         always_run: true
