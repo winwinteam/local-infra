@@ -1,0 +1,28 @@
+# Standalone .NET Aspire Dashboard for lightweight local OpenTelemetry observability.
+# Single-file Compose spec (no `include:`) for compatibility with `podman compose`,
+# `podman-compose`, and `docker compose`.
+#
+# Web UI:    http://${ASPIRE_CONNECT_IP}:${ASPIRE_UI_PORT}
+# OTLP HTTP: http://${ASPIRE_CONNECT_IP}:${ASPIRE_OTLP_HTTP_PORT} (POST /v1/traces, /v1/logs, /v1/metrics)
+# OTLP gRPC: http://${ASPIRE_CONNECT_IP}:${ASPIRE_OTLP_GRPC_PORT}
+#
+# Quick start:
+#   cp .env.example .env
+#   bash scripts/run_aspire.sh
+
+name: aspire
+
+services:
+  aspire:
+    image: mcr.microsoft.com/dotnet/aspire-dashboard:9.0
+    container_name: aspire
+    restart: unless-stopped
+    network_mode: host
+    mem_limit: ${ASPIRE_MEM_LIMIT}
+    environment:
+      - TZ=${TZ}
+      - DOTNET_CLI_TELEMETRY_OPTOUT=1
+      - DOTNET_DASHBOARD_UNSECURED_ALLOW_ANONYMOUS=true
+      - ASPNETCORE_URLS=http://${ASPIRE_LISTEN_IP}:${ASPIRE_UI_PORT}
+      - DOTNET_DASHBOARD_OTLP_ENDPOINT_URL=http://${ASPIRE_LISTEN_IP}:${ASPIRE_OTLP_GRPC_PORT}
+      - DOTNET_DASHBOARD_OTLP_HTTP_ENDPOINT_URL=http://${ASPIRE_LISTEN_IP}:${ASPIRE_OTLP_HTTP_PORT}
