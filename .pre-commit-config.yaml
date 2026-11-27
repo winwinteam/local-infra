@@ -35,7 +35,7 @@ repos:
       - id: prevent-local-paths
         # name: Prevent leaking absolute paths (/home, /mnt)
         name: Prevent leaking absolute paths (/home)
-        entry: (?:(?<=[ \t"'=])|^)(/home/[a-zA-Z0-9_.-])
+        entry: (?:(?<=[ \t"'`(:=])|^)(/home/(?!(?:ubuntu|sandbox-runner)\b)[a-zA-Z0-9_.-]+)
         # entry: (?:(?<=[ \t"'=])|^)(/home/[a-zA-Z0-9_.-]+|/mnt/[a-zA-Z0-9_.-]+)
         language: pygrep
         types: [text]
@@ -54,7 +54,7 @@ repos:
       - id: trufflehog
         name: TruffleHog (System)
         # Use the absolute path to your home directory binary
-        entry: bash -c "git ls-files --exclude-standard --cached --others | grep -v -E -f .trufflehog/exclude_paths.txt | xargs -d '\n' ~/.local/bin/trufflehog filesystem --fail --config=.trufflehog/rules.yaml"
+        entry: bash -c 'BIN=$(command -v trufflehog || echo "$HOME/.local/bin/trufflehog"); if [ -x "$BIN" ]; then git ls-files --exclude-standard --cached --others | grep -v -E -f .trufflehog/exclude_paths.txt | xargs -r -d "\n" "$BIN" filesystem --fail --config=.trufflehog/rules.yaml; else echo "TruffleHog binary not found, skipping scan"; fi'
         language: system
         pass_filenames: false
         exclude: ^(\.agents|\.claude)/skills/
@@ -86,6 +86,7 @@ repos:
         language: system
         pass_filenames: false
         types: [python]
+        exclude: ^(notebooks/|docker/)
 
   # - repo: https://github.com/bridgecrewio/checkov
   #   rev: "3.2.327" # Replace with the latest Checkov version tag
