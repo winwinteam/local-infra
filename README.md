@@ -8,8 +8,9 @@ Instead of bundling shared infrastructure stacks inside individual application r
 
 | Service | Path | Host Ports | Purpose |
 |---|---|---|---|
+| **Aspire Dashboard** | `aspire/` | Web UI: `:18888`, OTLP HTTP: `:4318`, gRPC: `:4317` | Lightweight (~40–100 MiB) Podman-ready OpenTelemetry traces, logs & metrics UI |
 | **Langfuse** (v4) | `langfuse/` | Web UI / OTLP: `:3100`, MinIO: `:9090` | LLM observability, tracing, dataset curation & evals |
-| **HyperDX** | `hyperdx/` | Web UI: `:8088`, OTLP HTTP: `:4318`, gRPC: `:4317`, ClickHouse: `:8123` / `:9000` | OpenTelemetry distributed tracing and log aggregation |
+| **HyperDX** | `hyperdx/` | Web UI: `:8088`, OTLP HTTP: `:4318`, gRPC: `:4317`, ClickHouse: `:8123` / `:9000` | Full OpenTelemetry distributed tracing, ClickHouse storage & log aggregation (~2–3.5 GiB) |
 | **Gitea** | `gitea/` | Web UI: `:3200`, SSH: `:2222` | Local GitHub repository mirror & timestamped immutable backup server |
 
 ## Conventions
@@ -23,6 +24,17 @@ Instead of bundling shared infrastructure stacks inside individual application r
    - Ports are assigned to avoid clashing with common development ports (e.g., API gateway on 3000, app Redis on 6379, app Postgres on 5432).
 4. **Volume Persistence**:
    - Compose project names and volume declarations are configured to ensure persistence across restarts.
+
+## Quick Start (Aspire Dashboard — Lightweight OTel UI)
+
+> **Note:** Aspire (`~100 MiB`) and HyperDX (`~2–3.5 GiB`) intentionally share OTLP ports `4317`/`4318` so client apps use the exact same `OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318`. Run **either** `aspire` **or** `hyperdx` at a time.
+
+```bash
+cd aspire
+cp .env.example .env
+bash scripts/run_aspire.sh     # auto-detects podman compose -> podman-compose -> docker compose
+bash scripts/test_aspire.sh
+```
 
 ## Quick Start (Langfuse)
 

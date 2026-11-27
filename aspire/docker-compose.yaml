@@ -1,0 +1,37 @@
+# Standalone .NET Aspire Dashboard for lightweight local OpenTelemetry observability.
+# Single-file Compose spec (no `include:`) for compatibility with `podman compose`,
+# `podman-compose`, and `docker compose`.
+#
+# Web UI:    http://${ASPIRE_CONNECT_IP}:${ASPIRE_UI_PORT}
+# OTLP HTTP: http://${ASPIRE_CONNECT_IP}:${ASPIRE_OTLP_HTTP_PORT} (POST /v1/traces, /v1/logs, /v1/metrics)
+# OTLP gRPC: http://${ASPIRE_CONNECT_IP}:${ASPIRE_OTLP_GRPC_PORT}
+#
+# Quick start:
+#   cp .env.example .env
+#   bash scripts/run_aspire.sh
+
+name: aspire
+
+services:
+  aspire:
+    # >= 13.2 required for the telemetry read API (/api/telemetry/*) used by test_aspire.sh
+    image: mcr.microsoft.com/dotnet/aspire-dashboard:${ASPIRE_IMAGE_TAG}
+    container_name: aspire
+    restart: unless-stopped
+    network_mode: host
+    mem_limit: ${ASPIRE_MEM_LIMIT}
+    environment:
+      - TZ=${TZ}
+      - DOTNET_CLI_TELEMETRY_OPTOUT=1
+      - DOTNET_DASHBOARD_UNSECURED_ALLOW_ANONYMOUS=true
+      # Telemetry HTTP API (read-back: traces/spans/logs as OTLP JSON)
+      - Dashboard__Api__Enabled=true
+      - Dashboard__Api__AuthMode=Unsecured
+      # In-memory retention caps (keep within ASPIRE_MEM_LIMIT; oldest evicted first)
+      - Dashboard__TelemetryLimits__MaxTraceCount=${ASPIRE_MAX_TRACE_COUNT}
+      - Dashboard__TelemetryLimits__MaxLogCount=${ASPIRE_MAX_LOG_COUNT}
+      - Dashboard__TelemetryLimits__MaxMetricsCount=${ASPIRE_MAX_METRICS_COUNT}
+      - Dashboard__TelemetryLimits__MaxAttributeLength=${ASPIRE_MAX_ATTRIBUTE_LENGTH}
+      - ASPNETCORE_URLS=http://${ASPIRE_LISTEN_IP}:${ASPIRE_UI_PORT}
+      - DOTNET_DASHBOARD_OTLP_ENDPOINT_URL=http://${ASPIRE_LISTEN_IP}:${ASPIRE_OTLP_GRPC_PORT}
+      - DOTNET_DASHBOARD_OTLP_HTTP_ENDPOINT_URL=http://${ASPIRE_LISTEN_IP}:${ASPIRE_OTLP_HTTP_PORT}
