@@ -1,0 +1,34 @@
+# Standalone RustFS S3-compatible object storage for local development.
+# Single-file Compose spec (no `include:`) for compatibility with `podman compose`,
+# `podman-compose`, and `docker compose`.
+#
+# S3 API:  http://${RUSTFS_CONNECT_IP}:${RUSTFS_S3_PORT}
+# Console: http://${RUSTFS_CONNECT_IP}:${RUSTFS_CONSOLE_PORT}
+#
+# Quick start:
+#   cp .env.example .env
+#   bash scripts/run_rustfs.sh
+
+name: rustfs
+
+services:
+  rustfs:
+    image: rustfs/rustfs:${RUSTFS_IMAGE_TAG}
+    container_name: rustfs
+    restart: "no"
+    network_mode: host
+    mem_limit: ${RUSTFS_MEM_LIMIT}
+    # Rootless Podman: container root (0:0) maps to the host user owning
+    # RUSTFS_DATA_DIR. The image's default non-root user cannot write to it
+    # ("Permission denied (os error 13)"). `:Z` relabels for SELinux.
+    user: '0:0'
+    volumes:
+      - '${RUSTFS_DATA_DIR}:/data:Z'
+    environment:
+      - TZ=${TZ}
+      - RUSTFS_ADDRESS=${RUSTFS_LISTEN_IP}:${RUSTFS_S3_PORT}
+      - RUSTFS_CONSOLE_ADDRESS=${RUSTFS_LISTEN_IP}:${RUSTFS_CONSOLE_PORT}
+      - RUSTFS_CONSOLE_ENABLE=${RUSTFS_CONSOLE_ENABLE}
+      - RUSTFS_ACCESS_KEY=${RUSTFS_ACCESS_KEY}
+      - RUSTFS_SECRET_KEY=${RUSTFS_SECRET_KEY}
+    command: '/data'

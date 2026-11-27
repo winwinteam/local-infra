@@ -1,0 +1,40 @@
+# Shared chDB Brain (Single-Writer MCP + HTTP Agent Memory Server).
+# Single-file Compose spec (no `include:`) for compatibility with `podman compose`,
+# `podman-compose`, and `docker compose`.
+#
+# MCP endpoint: http://${CHDB_BRAIN_CONNECT_IP}:${CHDB_BRAIN_PORT}/mcp
+# Health check: http://${CHDB_BRAIN_CONNECT_IP}:${CHDB_BRAIN_PORT}/healthz
+#
+# Quick start:
+#   cp .env.example .env
+#   bash scripts/run_chdb_brain.sh
+
+name: chdb_brain
+
+services:
+  chdb_brain:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: local-infra/chdb-brain:local
+    container_name: chdb_brain
+    restart: unless-stopped
+    network_mode: host
+    mem_limit: ${CHDB_BRAIN_MEM_LIMIT}
+    volumes:
+      - './data:${CHDB_BRAIN_DATA_DIR}'
+    environment:
+      - TZ=${TZ}
+      - MALLOC_ARENA_MAX=2
+      - CHDB_BRAIN_LISTEN_IP=${CHDB_BRAIN_LISTEN_IP}
+      - CHDB_BRAIN_PORT=${CHDB_BRAIN_PORT}
+      - CHDB_BRAIN_DB_NAME=${CHDB_BRAIN_DB_NAME}
+      - CHDB_BRAIN_DATA_DIR=${CHDB_BRAIN_DATA_DIR}
+      - CHDB_BRAIN_IDLE_CLOSE_SEC=${CHDB_BRAIN_IDLE_CLOSE_SEC:-60}
+      - CHDB_BRAIN_MAX_THREADS=${CHDB_BRAIN_MAX_THREADS:-2}
+      - CHDB_BRAIN_MAX_QUERY_MEM_BYTES=${CHDB_BRAIN_MAX_QUERY_MEM_BYTES:-268435456}
+      - CHDB_BRAIN_S3_ENDPOINT=${CHDB_BRAIN_S3_ENDPOINT:-}
+      - CHDB_BRAIN_S3_BUCKET=${CHDB_BRAIN_S3_BUCKET:-}
+      - CHDB_BRAIN_S3_PREFIX=${CHDB_BRAIN_S3_PREFIX:-}
+      - CHDB_BRAIN_S3_ACCESS_KEY=${CHDB_BRAIN_S3_ACCESS_KEY:-}
+      - CHDB_BRAIN_S3_SECRET_KEY=${CHDB_BRAIN_S3_SECRET_KEY:-}
