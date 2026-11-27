@@ -1,0 +1,4 @@
+# Host-side helpers (scripts/mirror_to_rustfs.py, scripts/rustfs_sql.py).
+# Not used by the container image.
+#   python3 -m venv .venv && .venv/bin/pip install -r requirements-host.txt
+chdb>=4.5
