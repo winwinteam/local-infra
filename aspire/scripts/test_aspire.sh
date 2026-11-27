@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Smoke test for local-infra Aspire Dashboard stack.
-# Verifies container status, Web UI HTTP 200, and OTLP HTTP /v1/traces, /v1/logs, /v1/metrics endpoints.
+# Verifies container status, Web UI HTTP 200, OTLP HTTP /v1/traces, /v1/logs, /v1/metrics
+# endpoints, and an end-to-end OTel + Kafka trace/log round-trip via the telemetry API.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -113,6 +114,22 @@ check_otlp_endpoint() {
 check_otlp_endpoint 3 "Traces" "/v1/traces"
 check_otlp_endpoint 4 "Logs" "/v1/logs"
 check_otlp_endpoint 5 "Metrics" "/v1/metrics"
+
+echo ""
+echo "=== 6. OTel + Kafka Round-Trip (write via OTLP, read back via /api/telemetry) ==="
+# Emits a dummy trace (HTTP -> Kafka producer -> Kafka consumer, traceparent carried in
+# record headers, Kafka attrs + span events + correlated logs), then validates it via the
+# Aspire telemetry HTTP API (requires aspire-dashboard >= 13.2, Dashboard__Api__Enabled=true).
+if ! command -v uv >/dev/null 2>&1; then
+  echo "ERROR: 'uv' is required for the round-trip test (https://docs.astral.sh/uv/)." >&2
+  exit 1
+fi
+if ! uv run --quiet --script "$SCRIPT_DIR/otel_kafka_roundtrip.py" \
+  --otlp "$OTLP_URL" \
+  --ui "$UI_URL"; then
+  echo "ERROR: OTel + Kafka round-trip validation failed" >&2
+  exit 1
+fi
 
 echo ""
 echo "=========================================================="

@@ -26,6 +26,11 @@ set +a
 : "${ASPIRE_OTLP_HTTP_PORT:?ASPIRE_OTLP_HTTP_PORT must be set in .env}"
 : "${ASPIRE_MEM_LIMIT:?ASPIRE_MEM_LIMIT must be set in .env}"
 : "${TZ:?TZ must be set in .env}"
+: "${ASPIRE_IMAGE_TAG:?ASPIRE_IMAGE_TAG must be set in .env (>= 13.2 for telemetry API)}"
+: "${ASPIRE_MAX_TRACE_COUNT:?ASPIRE_MAX_TRACE_COUNT must be set in .env}"
+: "${ASPIRE_MAX_LOG_COUNT:?ASPIRE_MAX_LOG_COUNT must be set in .env}"
+: "${ASPIRE_MAX_METRICS_COUNT:?ASPIRE_MAX_METRICS_COUNT must be set in .env}"
+: "${ASPIRE_MAX_ATTRIBUTE_LENGTH:?ASPIRE_MAX_ATTRIBUTE_LENGTH must be set in .env}"
 
 # Auto-detect Compose CLI: podman compose -> podman-compose -> docker compose
 COMPOSE_CMD=()
@@ -50,6 +55,28 @@ OTLP_GRPC_URL="http://${ASPIRE_CONNECT_IP}:${ASPIRE_OTLP_GRPC_PORT}"
 
 echo "=== Starting Aspire Dashboard from local-infra (${COMPOSE_CMD[*]}) ==="
 
+# Preflight: the container uses host networking, so any foreign listener on our
+# ports (e.g. VS Code port-forwarding, HyperDX, another dashboard) causes a
+# Kestrel "address already in use" crash loop. Detect it up front.
+if command -v ss >/dev/null 2>&1; then
+  CONFLICTS=""
+  for port in "$ASPIRE_UI_PORT" "$ASPIRE_OTLP_GRPC_PORT" "$ASPIRE_OTLP_HTTP_PORT"; do
+    while IFS= read -r line; do
+      [ -n "$line" ] || continue
+      # Ignore our own dashboard (rootless container process is visible on host)
+      case "$line" in *Aspire.Dashboa*|*'"dotnet"'*) continue ;; esac
+      CONFLICTS+="  port ${port}: ${line}"$'\n'
+    done < <(ss -ltnpH "sport = :${port}" 2>/dev/null || true)
+  done
+  if [ -n "$CONFLICTS" ]; then
+    echo "ERROR: Required port(s) already in use by another process:" >&2
+    printf '%s' "$CONFLICTS" >&2
+    echo "Free them first (e.g. VS Code: Ports panel -> Stop Forwarding Port; or stop HyperDX)." >&2
+    "$CONTAINER_CLI" stop aspire >/dev/null 2>&1 || true
+    exit 1
+  fi
+fi
+
 STATE_FILE="$SERVICE_DIR/.compose.sha256"
 CURRENT_HASH="$(compute_stack_hash "$SERVICE_DIR")"
 PREVIOUS_HASH=""
@@ -72,7 +99,8 @@ echo "$CURRENT_HASH" > "$STATE_FILE"
 echo "Waiting for Aspire Web UI on ${UI_URL} ..."
 READY=0
 for i in {1..30}; do
-  UI_STATUS="$(curl -sL --max-time 3 --connect-timeout 2 -o /dev/null -w "%{http_code}" "${UI_URL}" || echo "000")"
+  UI_STATUS="$(curl -sL --max-time 3 --connect-timeout 2 -o /dev/null -w "%{http_code}" "${UI_URL}" || true)"
+  UI_STATUS="${UI_STATUS:-000}"
   if [ "$UI_STATUS" = "200" ]; then
     echo "Aspire Web UI is ready! (HTTP 200)"
     READY=1
@@ -97,7 +125,8 @@ for i in {1..30}; do
     -X POST \
     -H "Content-Type: application/x-protobuf" \
     --data-binary "" \
-    "${OTLP_HTTP_URL}/v1/traces" || echo "000")"
+    "${OTLP_HTTP_URL}/v1/traces" || true)"
+  OTLP_STATUS="${OTLP_STATUS:-000}"
   if [ "$OTLP_STATUS" = "200" ]; then
     echo "Aspire OTLP HTTP receiver is ready! (HTTP 200)"
     OTLP_READY=1

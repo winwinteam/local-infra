@@ -32,6 +32,29 @@ Verify container status, Web UI availability (`HTTP 200`), and OTLP HTTP `/v1/tr
 bash scripts/test_aspire.sh
 ```
 
+Step 6 runs [`scripts/otel_kafka_roundtrip.py`](scripts/otel_kafka_roundtrip.py) with `uv run --script`. Its dependencies are declared inline (PEP 723), so no venv setup is needed. The script:
+1. **Writes** a dummy trace over OTLP/HTTP: `HTTP → Kafka producer → Kafka consumer`. The W3C `traceparent` travels in in-memory Kafka record headers (no broker needed). Each span carries Kafka attributes (`messaging.destination.name`, `messaging.kafka.message.offset`, `messaging.message.id`, …) and a `kafka.message` span event with a payload preview. Two structured logs linked to the trace are emitted too.
+2. **Reads back** from the Aspire telemetry HTTP API (`GET :18888/api/telemetry/traces/{traceId}` and `/api/telemetry/logs`). It checks the span parent/child links, the Kafka attributes, the span events, and the log ↔ trace correlation.
+
+> **Requires `aspire-dashboard` ≥ 13.2** (`ASPIRE_IMAGE_TAG` in `.env`) with `Dashboard__Api__Enabled=true`. Version 9.x has no telemetry read API.
+
+Run it standalone, for example against Aspire from inside the `krunvm` VM:
+
+```bash
+uv run --script scripts/otel_kafka_roundtrip.py --otlp http://127.0.0.1:4318 --ui http://127.0.0.1:18888
+```
+
+### Memory Tuning
+
+Telemetry is kept **in memory only**, and the oldest data is evicted first. The caps live in `.env` and are sized for `ASPIRE_MEM_LIMIT=256m`:
+
+| `.env` variable | Default | Dashboard setting |
+|---|---|---|
+| `ASPIRE_MAX_TRACE_COUNT` | `2000` | `Dashboard__TelemetryLimits__MaxTraceCount` |
+| `ASPIRE_MAX_LOG_COUNT` | `5000` | `Dashboard__TelemetryLimits__MaxLogCount` |
+| `ASPIRE_MAX_METRICS_COUNT` | `20000` | `Dashboard__TelemetryLimits__MaxMetricsCount` |
+| `ASPIRE_MAX_ATTRIBUTE_LENGTH` | `1024` | `Dashboard__TelemetryLimits__MaxAttributeLength` (caps payload previews) |
+
 ### Verifying OTLP Reachability (e.g., from a `krunvm` VM to Host PC)
 
 Aspire Dashboard 9.0 accepts OTLP/HTTP **Protobuf** (`application/x-protobuf`, which is the default for Python `opentelemetry-exporter-otlp-proto-http` and the Java `opentelemetry-javaagent`):
